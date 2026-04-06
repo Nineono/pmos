@@ -41,12 +41,12 @@ jobs:
                   send "\r"
                   exp_continue
               }
-              -re ".*pmaports.*" {
+              -re ".pmaports.*path.*" {
                   send "\r"
                   exp_continue
               }
-              -re ".*Release channel.*" {
-                  send "edge\r"
+              -re ".*Channel.*\\[edge\\].*" {
+                  send "\r"
                   exp_continue
               }
               -re ".*Vendor.*" {
