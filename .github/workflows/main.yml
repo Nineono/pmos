@@ -34,7 +34,6 @@ jobs:
 
       - name: Initialize with Expect
         run: |
-          mkdir -p /home/runner/pmbootstrap_work
           
           expect <<EOF
           set timeout 900
@@ -42,7 +41,7 @@ jobs:
 
           # 1. 处理 Work path (你截图中的第一个路径)
           expect "Work path*" { 
-              send "/home/runner/pmbootstrap_work\r" 
+              send "\r" 
           }
           
           # 2. 处理 pmaports path (你截图中的第二个路径)
