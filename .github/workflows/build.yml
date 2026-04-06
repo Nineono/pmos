@@ -1,4 +1,4 @@
-name: Build postmarketOS Image
+name: Build postmarketOS
 
 on:
   workflow_dispatch:
