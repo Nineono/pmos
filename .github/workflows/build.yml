@@ -111,7 +111,7 @@ jobs:
         run: |
           pmbootstrap install --password 12345
           mkdir -p ./output
-          pmbootstrap export --dest ./output
+          pmbootstrap export --output ./output
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
