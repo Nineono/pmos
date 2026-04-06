@@ -84,7 +84,7 @@ jobs:
                   exp_continue
               }
               -re ".*this timezone.*" {
-                  send "Asia/Shanghai\r"
+                  send "\r"
                   exp_continue
               }
               -re ".*Locale.*" {
@@ -109,7 +109,7 @@ jobs:
 
       - name: Build and Export
         run: |
-          pmbootstrap install
+          pmbootstrap install --password 12345
           mkdir -p ./output
           pmbootstrap export --dest ./output
 
