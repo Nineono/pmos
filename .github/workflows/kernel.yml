@@ -145,8 +145,7 @@ jobs:
       - name: Compile Kernel
         run: |
           cd kernel_src
-          bash -c "source ../pmbootstrap/helpers/envkernel.sh && make pmos_defconfig && make -j$(nproc)"
-
+          bash -c "source ../pmbootstrap/helpers/envkernel.sh && make ARCH=arm64 pmos_defconfig && make ARCH=arm64 -j$(nproc)"
       - name: Package to APK
         run: |
           cd kernel_src
