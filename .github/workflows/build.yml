@@ -109,7 +109,7 @@ jobs:
 
       - name: Apply Kernel Patch
         run: |
-          export KERNEL_PKG_PATH=$(pmbootstrap config work)/cache_git/pmaports/device/community/linux-postmarketos-qcom-msm89x7
+          export KERNEL_PKG_PATH=$(pmbootstrap config work)/cache_git/pmaports/device/testing/linux-postmarketos-qcom-msm89x7
 
           cp patches/wifi-fix.patch $KERNEL_PKG_PATH/
           
