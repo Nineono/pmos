@@ -1,0 +1,108 @@
+name: Build postmarketOS Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3 git qemu-user-static expect kpartx openssl \
+            wget curl rsync build-essential fakeroot \
+            bison flex device-tree-compiler ccache \
+            e2fsprogs dosfstools parted
+
+      - name: Setup pmbootstrap
+        run: |
+          git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
+          mkdir -p ~/.local/bin
+          ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.local/bin:$PATH"
+          pmbootstrap --version
+
+      - name: Initialize pmbootstrap
+        run: |
+          export TERM=dumb
+          export NO_COLOR=1
+          expect <<'EOF'
+          set timeout 900
+          spawn pmbootstrap init
+          expect "Work path" { send "\r"; exp_continue }
+          expect "pmaports" { send "\r"; exp_continue }
+          expect "Channel" { send "\r"; exp_continue }
+          expect "Vendor" { send "qcom\r"; exp_continue }
+          expect "Device codename" { send "msm89x7\r"; exp_continue }
+          expect "Username" { send "user\r"; exp_continue }
+          expect "Provider" { send "\r"; exp_continue }
+          expect "USB moded" { send "developer\r"; exp_continue }
+          expect "User interface" { send "console\r"; exp_continue }
+          expect "Install systemd" { send "y\r"; exp_continue }
+          expect "Extra packages" { send "none\r"; exp_continue }
+          expect "timezone" { send "\r"; exp_continue }
+          expect "Locale" { send "zh_CN.UTF-8\r"; exp_continue }
+          expect "hostname" { send "qcom-msm89x7\r"; exp_continue }
+          expect "Build outdated" { send "y\r"; exp_continue }
+          expect eof
+          EOF
+
+      - name: Apply Kernel Patch and Config
+        run: |
+          PKG_NAME="linux-postmarketos-qcom-msm89x7"
+          WORK=$(pmbootstrap config work)
+          
+          # 查找内核源码所在的 pmaports 目录
+          KERNEL_PKG_PATH=$(find "$WORK/cache_git/pmaports" -type d -name "$PKG_NAME" | head -n1)
+          if [ -z "$KERNEL_PKG_PATH" ]; then echo "Kernel path not found"; exit 1; fi
+          
+          CONF_TARGET="config-postmarketos-qcom-msm89x7.aarch64"
+          cd "$KERNEL_PKG_PATH"
+
+          # 应用补丁
+          if [ -f "$GITHUB_WORKSPACE/patches/wifi-fix.patch" ]; then
+            cp "$GITHUB_WORKSPACE/patches/wifi-fix.patch" ./
+            grep -q "wifi-fix.patch" APKBUILD || sed -i 's|source="|source="wifi-fix.patch |' APKBUILD
+          fi
+
+          # 替换内核配置文件 (确保 config_new.txt 中 CONFIG_NFT_TPROXY=y)
+          if [ -f "$GITHUB_WORKSPACE/patches/config_new.txt" ]; then
+            cp "$GITHUB_WORKSPACE/patches/config_new.txt" "./$CONF_TARGET"
+          else
+            echo "Error: config_new.txt not found in patches/ directory"; exit 1
+          fi
+
+          # 更新校验和 (防止编译报错)
+          pmbootstrap checksum $PKG_NAME
+
+      - name: Build Kernel APK
+        run: |
+          unset CI
+          export USE_CCACHE=1
+          # 仅执行包编译，不生成全系统镜像
+          pmbootstrap -v build linux-postmarketos-qcom-msm89x7 --force
+
+      - name: Collect and Export APK
+        run: |
+          mkdir -p output_apks
+          WORK=$(pmbootstrap config work)
+          
+          # 寻找编译好的 aarch64 内核 APK 包
+          # 一般位于 packages/edge/aarch64 或 packages/stable/aarch64
+          find "$WORK/packages" -name "linux-postmarketos-qcom-msm89x7-*.apk" -exec cp {} output_apks/ \;
+          
+          echo "Built APK files:"
+          ls -lh output_apks/
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmos-kernel-apk
+          path: output_apks/*.apk
