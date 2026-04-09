@@ -162,13 +162,11 @@ jobs:
 
           pmbootstrap checksum $PKG_NAME
 
-      - name: Build
+      - name: Build (verbose compile)
         run: |
-          export CI=false
+          unset CI
           export USE_CCACHE=1
-          export MAKEFLAGS="-j2 V=1"
-
-          (while true; do echo "[keepalive] building..."; sleep 60; done) &
+          export MAKEFLAGS="V=1 -j2"
 
           pmbootstrap -v build linux-postmarketos-qcom-msm89x7 --force
           
