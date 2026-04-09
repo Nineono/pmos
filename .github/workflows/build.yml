@@ -107,6 +107,17 @@ jobs:
           }
           EOF
 
+      - name: Apply Kernel Patch
+        run: |
+          export KERNEL_PKG_PATH=$(pmbootstrap config work)/cache_git/pmaports/device/community/linux-postmarketos-qcom-msm89x7
+
+          cp patches/wifi-fix.patch $KERNEL_PKG_PATH/
+          
+          cd $KERNEL_PKG_PATH
+          sed -i '/source="/a \    wifi-fix.patch' APKBUILD
+
+          pmbootstrap checksum linux-postmarketos-qcom-msm89x7
+
       - name: Build and Export
         run: |
           pmbootstrap install --password 12345
