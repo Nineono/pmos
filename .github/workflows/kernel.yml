@@ -29,29 +29,87 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           pmbootstrap --version
 
-      - name: Initialize pmbootstrap
+      - name: Initialize with Expect
         run: |
           export TERM=dumb
           export NO_COLOR=1
+
           expect <<'EOF'
           set timeout 900
-          spawn pmbootstrap init
-          expect "Work path" { send "\r"; exp_continue }
-          expect "pmaports" { send "\r"; exp_continue }
-          expect "Channel" { send "\r"; exp_continue }
-          expect "Vendor" { send "qcom\r"; exp_continue }
-          expect "Device codename" { send "msm89x7\r"; exp_continue }
-          expect "Username" { send "user\r"; exp_continue }
-          expect "Provider" { send "\r"; exp_continue }
-          expect "USB moded" { send "developer\r"; exp_continue }
-          expect "User interface" { send "console\r"; exp_continue }
-          expect "Install systemd" { send "y\r"; exp_continue }
-          expect "Extra packages" { send "none\r"; exp_continue }
-          expect "timezone" { send "\r"; exp_continue }
-          expect "Locale" { send "zh_CN.UTF-8\r"; exp_continue }
-          expect "hostname" { send "qcom-msm89x7\r"; exp_continue }
-          expect "Build outdated" { send "y\r"; exp_continue }
-          expect eof
+
+          spawn stdbuf -oL pmbootstrap init
+
+          expect {
+              -re ".*Work path.*" {
+                  send "\r"
+                  exp_continue
+              }
+              -re ".pmaports.*path.*" {
+                  send "\r"
+                  exp_continue
+              }
+              -re ".*Channel.*" {
+                  send "\r"
+                  exp_continue
+              }
+              -re ".*Vendor.*" {
+                  send "qcom\r"
+                  exp_continue
+              }
+              -re ".*Device codename.*" {
+                  send "msm89x7\r"
+                  exp_continue
+              }
+              -re ".*Username.*" {
+                  send "user\r"
+                  exp_continue
+              }
+              -re ".*Provider.*" {
+                  send "\r"
+                  exp_continue
+              }
+              -re ".*USB moded.*" {
+                  send "developer\r"
+                  exp_continue
+              }
+              -re ".*User interface.*" {
+                  send "console\r"
+                  exp_continue
+              }
+              -re ".*Install systemd.*" {
+                  send "\r"
+                  exp_continue
+              }
+              -re ".*Change them.*" {
+                  send "\r"
+                  exp_continue
+              }
+              -re ".*Extra packages.*" {
+                  send "nano,htop,neofetch\r"
+                  exp_continue
+              }
+              -re ".*this timezone.*" {
+                  send "\r"
+                  exp_continue
+              }
+              -re ".*Locale.*" {
+                  send "zh_CN\r"
+                  exp_continue
+              }
+              -re ".*hostname.*" {
+                  send "\r"
+                  exp_continue
+              }
+              -re ".*Build outdated.*" {
+                  send "y\r"
+                  exp_continue
+              }
+              -re ".*Zap existing.*" {
+                  send "\r"
+                  exp_continue
+              }
+              eof
+          }
           EOF
 
       - name: Apply Kernel Patch and Config
