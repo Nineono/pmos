@@ -15,7 +15,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3 git qemu-user-static expect kpartx openssl
 
-      - name: Setup pmbootstrap (Wiki Way)
+      - name: Setup pmbootstrap
         run: |
           git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
           mkdir -p ~/.local/bin
@@ -24,7 +24,7 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           pmbootstrap --version
 
-      - name: Initialize with Expect (Robust CI Version)
+      - name: Initialize with Expect
         run: |
           export TERM=dumb
           export NO_COLOR=1
@@ -107,16 +107,29 @@ jobs:
           }
           EOF
 
-      - name: Apply Kernel Patch
+      - name: Apply Kernel Patch and Config
         run: |
-          export KERNEL_PKG_PATH=$(pmbootstrap config work)/cache_git/pmaports/device/testing/linux-postmarketos-qcom-msm89x7
+          PKG_NAME="linux-postmarketos-qcom-msm89x7"
+          KERNEL_PKG_PATH=$(pmbootstrap config work)/cache_git/pmaports/device/testing/$PKG_NAME
+          CONF_TARGET="config-postmarketos-qcom-msm89x7.aarch64"
 
-          cp patches/wifi-fix.patch $KERNEL_PKG_PATH/
-          
           cd $KERNEL_PKG_PATH
-          sed -i '/source="/a \    wifi-fix.patch' APKBUILD
 
-          pmbootstrap checksum linux-postmarketos-qcom-msm89x7
+          cp $GITHUB_WORKSPACE/patches/wifi-fix.patch ./
+
+          if ! grep -q "wifi-fix.patch" APKBUILD; then
+            sed -i '/source="/a \	wifi-fix.patch' APKBUILD
+          fi
+
+          echo "Updating kernel config: $CONF_TARGET"
+          if [ -f "$GITHUB_WORKSPACE/config_new.txt" ]; then
+            cp "$GITHUB_WORKSPACE/config_new.txt" "./$CONF_TARGET"
+          else
+            echo "Error: config_new.txt not found in workspace!"
+            exit 1
+          fi
+
+          pmbootstrap checksum $PKG_NAME
 
       - name: Build and Export
         run: |
