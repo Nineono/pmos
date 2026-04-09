@@ -164,8 +164,14 @@ jobs:
 
       - name: Build
         run: |
-          pmbootstrap build linux-postmarketos-qcom-msm89x7 --force
+          export CI=false
+          export USE_CCACHE=1
+          export MAKEFLAGS="-j2 V=1"
 
+          (while true; do echo "[keepalive] building..."; sleep 60; done) &
+
+          pmbootstrap -v build linux-postmarketos-qcom-msm89x7 --force
+          
       - name: Export Image
         run: |
           pmbootstrap export
