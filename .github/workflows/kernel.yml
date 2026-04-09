@@ -1,10 +1,10 @@
-name: Build postmarketOS Kernel
+name: Complie Kernel
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-kernel:
+  build-pmos:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,9 +16,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             python3 git qemu-user-static expect kpartx openssl \
-            wget curl rsync build-essential fakeroot \
-            bison flex device-tree-compiler ccache \
-            e2fsprogs dosfstools parted
+            sudo wget curl rsync \
+            build-essential \
+            fakeroot \
+            bison flex \
+            device-tree-compiler \
+            ccache \
+            e2fsprogs \
+            dosfstools \
+            parted
+
+      - name: Enable binfmt and loop devices
+        run: |
+          sudo modprobe loop || true
+          sudo losetup -f || true
+          sudo update-binfmts --enable || true
 
       - name: Setup pmbootstrap
         run: |
@@ -116,51 +128,58 @@ jobs:
         run: |
           PKG_NAME="linux-postmarketos-qcom-msm89x7"
           WORK=$(pmbootstrap config work)
-          
-          # 查找内核源码所在的 pmaports 目录
+
           KERNEL_PKG_PATH=$(find "$WORK/cache_git/pmaports" -type d -name "$PKG_NAME" | head -n1)
-          if [ -z "$KERNEL_PKG_PATH" ]; then echo "Kernel path not found"; exit 1; fi
-          
+
+          if [ -z "$KERNEL_PKG_PATH" ]; then
+            echo "Kernel package path not found"
+            exit 1
+          fi
+
           CONF_TARGET="config-postmarketos-qcom-msm89x7.aarch64"
+
           cd "$KERNEL_PKG_PATH"
 
-          # 应用补丁
           if [ -f "$GITHUB_WORKSPACE/patches/wifi-fix.patch" ]; then
             cp "$GITHUB_WORKSPACE/patches/wifi-fix.patch" ./
-            grep -q "wifi-fix.patch" APKBUILD || sed -i 's|source="|source="wifi-fix.patch |' APKBUILD
+            grep -q "wifi-fix.patch" APKBUILD || \
+            sed -i 's|source="|source="wifi-fix.patch |' APKBUILD
+            echo "Successfully applied wifi-fix.patch"
+          else
+            echo "Error: wifi-fix.patch not found"
+            exit 1
           fi
 
-          # 替换内核配置文件 (确保 config_new.txt 中 CONFIG_NFT_TPROXY=y)
+          echo "Updating kernel config: $CONF_TARGET"
           if [ -f "$GITHUB_WORKSPACE/patches/config_new.txt" ]; then
             cp "$GITHUB_WORKSPACE/patches/config_new.txt" "./$CONF_TARGET"
+            echo "Successfully applied config_new.txt"
           else
-            echo "Error: config_new.txt not found in patches/ directory"; exit 1
+            echo "Error: config_new.txt not found"
+            ls -R $GITHUB_WORKSPACE/patches/
+            exit 1
           fi
 
-          # 更新校验和 (防止编译报错)
           pmbootstrap checksum $PKG_NAME
 
-      - name: Build Kernel APK
+      - name: Compile Kernel
         run: |
-          unset CI
-          export USE_CCACHE=1
-          # 仅执行包编译，不生成全系统镜像
-          pmbootstrap -v build linux-postmarketos-qcom-msm89x7 --force
+          cd kernel_src
+          bash -c "source ../pmbootstrap/helpers/envkernel.sh && make pmos_defconfig && make -j$(nproc)"
 
-      - name: Collect and Export APK
+      - name: Package to APK
         run: |
-          mkdir -p output_apks
-          WORK=$(pmbootstrap config work)
-          
-          # 寻找编译好的 aarch64 内核 APK 包
-          # 一般位于 packages/edge/aarch64 或 packages/stable/aarch64
-          find "$WORK/packages" -name "linux-postmarketos-qcom-msm89x7-*.apk" -exec cp {} output_apks/ \;
-          
-          echo "Built APK files:"
-          ls -lh output_apks/
+          cd kernel_src
+          pmbootstrap build --envkernel linux-postmarketos-qcom-msm89x7
 
-      - name: Upload Artifact
+      - name: Collect APK Only
+        run: |
+          WORK_PATH=$(pmbootstrap config work)
+          mkdir -p output/
+          find "$WORK_PATH/packages" -name "linux-postmarketos-qcom-msm89x7*.apk" -exec cp {} output/ \;
+
+      - name: Upload Kernel APK
         uses: actions/upload-artifact@v4
         with:
-          name: pmos-kernel-apk
-          path: output_apks/*.apk
+          name: pmos-kernel-packages
+          path: output/
