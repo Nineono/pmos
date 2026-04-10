@@ -12,10 +12,6 @@ on:
         description: "branch"
         required: true
         default: "msm89x7/6.19.5"
-      set_kernel_patch_version:
-        description: "kernel_patch_version"
-        required: true
-        default: "msm8937-6.19"
       set_kernel_localversion:
         description: "kernel_localversion"
         required: true
@@ -41,7 +37,7 @@ jobs:
           sudo -E apt-get -qq update
           sudo -E apt-get -qq install -y \
             binfmt-support qemu-user-static \
-            gcc-aarch64-linux-gnu gcc-10-aarch64-linux-gnu \
+            gcc-aarch64-linux-gnu \
             fakeroot apk-tools \
             bison flex bc git unzip \
             libncurses-dev libssl-dev libelf-dev \
@@ -49,38 +45,39 @@ jobs:
 
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
-
           sudo timedatectl set-timezone "$TZ"
 
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
-
           echo "COMPILE_STARTINGTIME=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
 
           set_git_url="https://github.com/${{ github.event.inputs.set_git_repo }}.git"
-          set_git_repo="${{ github.event.inputs.set_git_repo }}"
-
-          if [[ "linux" = "${set_git_repo}" ]]; then
+          if [[ "${{ github.event.inputs.set_git_repo }}" == "linux" ]]; then
               set_git_url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git"
           fi
-
           echo "LINUX_GITURL=${set_git_url}" >> $GITHUB_ENV
 
       - name: Download source code
         run: |
           git clone --depth 1 -b ${{ github.event.inputs.set_git_branch }} ${{ env.LINUX_GITURL }} linux
 
-      - name: Patch kernel
+      - name: Patch & Config
         run: |
           cd linux/
+          # 应用你指定的补丁文件
+          if [ -f "../patches/wifi-fix.patch" ]; then
+            echo "Applying wifi-fix.patch"
+            patch -p1 -N < "../patches/wifi-fix.patch" || true
+          fi
 
-          for patch in `find ../patch/${{ github.event.inputs.set_kernel_patch_version }}/*.patch | LC_ALL=C sort -u`
-          do
-              echo "Applying $patch"
-              patch -p1 -N < "$patch" || true
-          done
-
-          cp ../patch/${{ github.event.inputs.set_kernel_patch_version }}/defconfig arch/arm64/configs/diy_defconfig
+          # 注入你指定的配置文件
+          if [ -f "../patches/config_new.txt" ]; then
+            cp "../patches/config_new.txt" arch/arm64/configs/diy_defconfig
+            echo "Successfully applied config_new.txt"
+          else
+            echo "Error: config_new.txt not found!"
+            exit 1
+          fi
 
       - name: Compile & Build APK
         id: compile
@@ -92,62 +89,55 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-gnu-
 
           make diy_defconfig
-
+          
+          # 禁用自动版本号，应用自定义后缀
           sed -i "s/^.*CONFIG_LOCALVERSION_AUTO.*$/# CONFIG_LOCALVERSION_AUTO is not set/" .config
-          sed -i "s/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=\"\"/" .config
-
           export LOCALVERSION=${{ github.event.inputs.set_kernel_localversion }}
-
+          
+          make prepare
           make -j$(nproc)
           make modules -j$(nproc)
 
-          KVER=$(make kernelrelease)
+          KVER=$(make -s kernelrelease)
           echo "Kernel version: $KVER"
 
-          # 目录
+          # 准备打包目录
           KERNEL_DIR=/workdir/pkg
           MODULES_DIR=/workdir/pkg-modules
+          mkdir -p $KERNEL_DIR/boot $KERNEL_DIR/usr/share/dtb $MODULES_DIR
 
-          mkdir -p $KERNEL_DIR/boot
-          mkdir -p $KERNEL_DIR/usr/share/dtb
-          mkdir -p $MODULES_DIR
-
-          # kernel
+          # 拷贝二进制产物
           cp arch/arm64/boot/Image $KERNEL_DIR/boot/vmlinuz-msm89x7
-
-          # dtb
           find arch/arm64/boot/dts -name "*.dtb" -exec cp {} $KERNEL_DIR/usr/share/dtb/ \;
-
-          # modules
           make modules_install INSTALL_MOD_PATH=$MODULES_DIR
 
-          # APK 元数据
+          # 生成 .PKGINFO (确保内部无多余空格)
           cat > $KERNEL_DIR/.PKGINFO <<EOF
-          pkgname = linux-msm89x7
-          pkgver = ${KVER}
-          pkgrel = 0
-          arch = aarch64
-          pkgdesc = msm89x7 kernel
-          license = GPL-2.0
-          origin = linux-msm89x7
-          builddate = $(date +%s)
-          EOF
+pkgname = linux-msm89x7
+pkgver = ${KVER}
+pkgrel = 0
+arch = aarch64
+pkgdesc = msm89x7 kernel for postmarketOS
+license = GPL-2.0
+origin = linux-msm89x7
+builddate = $(date +%s)
+EOF
 
           cat > $MODULES_DIR/.PKGINFO <<EOF
-          pkgname = linux-msm89x7-modules
-          pkgver = ${KVER}
-          pkgrel = 0
-          arch = aarch64
-          pkgdesc = msm89x7 kernel modules
-          license = GPL-2.0
-          origin = linux-msm89x7
-          builddate = $(date +%s)
-          EOF
+pkgname = linux-msm89x7-modules
+pkgver = ${KVER}
+pkgrel = 0
+arch = aarch64
+pkgdesc = msm89x7 kernel modules
+license = GPL-2.0
+origin = linux-msm89x7
+builddate = $(date +%s)
+EOF
 
+          # 打包产物 (强制 UID 为 0)
           cd /workdir
-
-          tar -czf linux-msm89x7-${KVER}.apk -C pkg .
-          tar -czf linux-msm89x7-modules-${KVER}.apk -C pkg-modules .
+          tar --owner=0 --group=0 -czf linux-msm89x7-${KVER}.apk -C pkg .
+          tar --owner=0 --group=0 -czf linux-msm89x7-modules-${KVER}.apk -C pkg-modules .
 
           echo "status=success" >> $GITHUB_OUTPUT
 
