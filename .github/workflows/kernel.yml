@@ -111,8 +111,8 @@ jobs:
           find arch/arm64/boot/dts -name "*.dtb" -exec cp {} $KERNEL_DIR/usr/share/dtb/ \;
           make modules_install INSTALL_MOD_PATH=$MODULES_DIR
 
-          # 生成 .PKGINFO (确保内部无多余空格)
-          cat > $KERNEL_DIR/.PKGINFO <<-EOF
+          # 生成 .PKGINFO
+          cat > $KERNEL_DIR/.PKGINFO <<EOF
           pkgname = linux-msm89x7
           pkgver = ${KVER}
           pkgrel = 0
@@ -122,8 +122,9 @@ jobs:
           origin = linux-msm89x7
           builddate = $(date +%s)
           EOF
+          sed -i 's/^[[:space:]]*//' $KERNEL_DIR/.PKGINFO
 
-          cat > $MODULES_DIR/.PKGINFO <<-EOF
+          cat > $MODULES_DIR/.PKGINFO <<EOF
           pkgname = linux-msm89x7-modules
           pkgver = ${KVER}
           pkgrel = 0
@@ -133,6 +134,7 @@ jobs:
           origin = linux-msm89x7
           builddate = $(date +%s)
           EOF
+          sed -i 's/^[[:space:]]*//' $MODULES_DIR/.PKGINFO
 
           # 打包产物 (强制 UID 为 0)
           cd /workdir
