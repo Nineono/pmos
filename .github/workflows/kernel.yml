@@ -1,164 +1,159 @@
-name: Complie Kernel
+name: Build Linux Kernel APK Arm64 (msm89x7)
 
 on:
+  repository_dispatch:
   workflow_dispatch:
+    inputs:
+      set_git_repo:
+        description: "repo"
+        required: true
+        default: "msm89x7-mainline/linux"
+      set_git_branch:
+        description: "branch"
+        required: true
+        default: "msm89x7/6.19.5"
+      set_kernel_patch_version:
+        description: "kernel_patch_version"
+        required: true
+        default: "msm8937-6.19"
+      set_kernel_localversion:
+        description: "kernel_localversion"
+        required: true
+        default: "-msm8937"
+
+env:
+  TZ: Asia/Shanghai
 
 jobs:
-  build-pmos:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-22.04
+    if: github.event.repository.owner.id == github.event.sender.id
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v3
 
-      - name: Install System Dependencies
+      - name: Initialization environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            python3 git qemu-user-static expect kpartx openssl \
-            sudo wget curl rsync \
-            build-essential \
-            fakeroot \
-            bison flex \
-            device-tree-compiler \
-            ccache \
-            e2fsprogs \
-            dosfstools \
-            parted
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install -y \
+            binfmt-support qemu-user-static \
+            gcc-aarch64-linux-gnu gcc-10-aarch64-linux-gnu \
+            fakeroot apk-tools \
+            bison flex bc git unzip \
+            libncurses-dev libssl-dev libelf-dev \
+            pkg-config
 
-      - name: Enable binfmt and loop devices
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+
+          sudo timedatectl set-timezone "$TZ"
+
+          sudo mkdir -p /workdir
+          sudo chown $USER:$GROUPS /workdir
+
+          echo "COMPILE_STARTINGTIME=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
+
+          set_git_url="https://github.com/${{ github.event.inputs.set_git_repo }}.git"
+          set_git_repo="${{ github.event.inputs.set_git_repo }}"
+
+          if [[ "linux" = "${set_git_repo}" ]]; then
+              set_git_url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git"
+          fi
+
+          echo "LINUX_GITURL=${set_git_url}" >> $GITHUB_ENV
+
+      - name: Download source code
         run: |
-          sudo modprobe loop || true
-          sudo losetup -f || true
-          sudo update-binfmts --enable || true
+          git clone --depth 1 -b ${{ github.event.inputs.set_git_branch }} ${{ env.LINUX_GITURL }} linux
 
-      - name: Setup pmbootstrap
+      - name: Patch kernel
         run: |
-          git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
-          mkdir -p ~/.local/bin
-          ln -s "$PWD/pmbootstrap/pmbootstrap.py" ~/.local/bin/pmbootstrap
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          export PATH="$HOME/.local/bin:$PATH"
-          pmbootstrap --version
+          cd linux/
 
-      - name: Initialize with Expect
+          for patch in `find ../patch/${{ github.event.inputs.set_kernel_patch_version }}/*.patch | LC_ALL=C sort -u`
+          do
+              echo "Applying $patch"
+              patch -p1 -N < "$patch" || true
+          done
+
+          cp ../patch/${{ github.event.inputs.set_kernel_patch_version }}/defconfig arch/arm64/configs/diy_defconfig
+
+      - name: Compile & Build APK
+        id: compile
         run: |
-          export TERM=dumb
-          export NO_COLOR=1
+          set -e
+          cd linux/
 
-          expect <<'EOF'
-          set timeout 900
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
 
-          spawn stdbuf -oL pmbootstrap init
+          make diy_defconfig
 
-          expect {
-              -re ".*Work path.*" {
-                  send "\r"
-                  exp_continue
-              }
-              -re ".pmaports.*path.*" {
-                  send "\r"
-                  exp_continue
-              }
-              -re ".*Channel.*" {
-                  send "\r"
-                  exp_continue
-              }
-              -re ".*Vendor.*" {
-                  send "qcom\r"
-                  exp_continue
-              }
-              -re ".*Device codename.*" {
-                  send "msm89x7\r"
-                  exp_continue
-              }
-              -re ".*Username.*" {
-                  send "user\r"
-                  exp_continue
-              }
-              -re ".*Provider.*" {
-                  send "\r"
-                  exp_continue
-              }
-              -re ".*USB moded.*" {
-                  send "developer\r"
-                  exp_continue
-              }
-              -re ".*User interface.*" {
-                  send "console\r"
-                  exp_continue
-              }
-              -re ".*Install systemd.*" {
-                  send "\r"
-                  exp_continue
-              }
-              -re ".*Change them.*" {
-                  send "\r"
-                  exp_continue
-              }
-              -re ".*Extra packages.*" {
-                  send "nano,htop,neofetch\r"
-                  exp_continue
-              }
-              -re ".*this timezone.*" {
-                  send "\r"
-                  exp_continue
-              }
-              -re ".*Locale.*" {
-                  send "zh_CN\r"
-                  exp_continue
-              }
-              -re ".*hostname.*" {
-                  send "\r"
-                  exp_continue
-              }
-              -re ".*Build outdated.*" {
-                  send "y\r"
-                  exp_continue
-              }
-              -re ".*Zap existing.*" {
-                  send "\r"
-                  exp_continue
-              }
-              eof
-          }
+          sed -i "s/^.*CONFIG_LOCALVERSION_AUTO.*$/# CONFIG_LOCALVERSION_AUTO is not set/" .config
+          sed -i "s/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=\"\"/" .config
+
+          export LOCALVERSION=${{ github.event.inputs.set_kernel_localversion }}
+
+          make -j$(nproc)
+          make modules -j$(nproc)
+
+          KVER=$(make kernelrelease)
+          echo "Kernel version: $KVER"
+
+          # 目录
+          KERNEL_DIR=/workdir/pkg
+          MODULES_DIR=/workdir/pkg-modules
+
+          mkdir -p $KERNEL_DIR/boot
+          mkdir -p $KERNEL_DIR/usr/share/dtb
+          mkdir -p $MODULES_DIR
+
+          # kernel
+          cp arch/arm64/boot/Image $KERNEL_DIR/boot/vmlinuz-msm89x7
+
+          # dtb
+          find arch/arm64/boot/dts -name "*.dtb" -exec cp {} $KERNEL_DIR/usr/share/dtb/ \;
+
+          # modules
+          make modules_install INSTALL_MOD_PATH=$MODULES_DIR
+
+          # APK 元数据
+          cat > $KERNEL_DIR/.PKGINFO <<EOF
+          pkgname = linux-msm89x7
+          pkgver = ${KVER}
+          pkgrel = 0
+          arch = aarch64
+          pkgdesc = msm89x7 kernel
+          license = GPL-2.0
+          origin = linux-msm89x7
+          builddate = $(date +%s)
           EOF
 
-      - name: Prepare Kernel Source
-        run: |
-          git clone --depth=1 https://github.com/msm89x7-mainline/linux.git kernel_src
-          
-          cd kernel_src
-          if [ -f "$GITHUB_WORKSPACE/patches/wifi-fix.patch" ]; then
-            git apply "$GITHUB_WORKSPACE/patches/wifi-fix.patch"
-            echo "Successfully applied wifi-fix.patch"
-          fi
+          cat > $MODULES_DIR/.PKGINFO <<EOF
+          pkgname = linux-msm89x7-modules
+          pkgver = ${KVER}
+          pkgrel = 0
+          arch = aarch64
+          pkgdesc = msm89x7 kernel modules
+          license = GPL-2.0
+          origin = linux-msm89x7
+          builddate = $(date +%s)
+          EOF
 
-          if [ -f "$GITHUB_WORKSPACE/patches/config_new.txt" ]; then
-            cp "$GITHUB_WORKSPACE/patches/config_new.txt" arch/arm64/configs/pmos_defconfig
-            echo "Successfully applied config_new.txt as pmos_defconfig"
-          else
-            echo "Error: config_new.txt not found"
-            exit 1
-          fi
+          cd /workdir
 
-      - name: Compile Kernel
-        run: |
-          cd kernel_src
-          bash -c "source ../pmbootstrap/helpers/envkernel.sh && make ARCH=arm64 pmos_defconfig && make ARCH=arm64 -j$(nproc)"
-      - name: Package to APK
-        run: |
-          cd kernel_src
-          pmbootstrap build --envkernel linux-postmarketos-qcom-msm89x7
+          tar -czf linux-msm89x7-${KVER}.apk -C pkg .
+          tar -czf linux-msm89x7-modules-${KVER}.apk -C pkg-modules .
 
-      - name: Collect APK Only
-        run: |
-          WORK_PATH=$(pmbootstrap config work)
-          mkdir -p output/
-          find "$WORK_PATH/packages" -name "linux-postmarketos-qcom-msm89x7*.apk" -exec cp {} output/ \;
+          echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload Kernel APK
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
+        if: steps.compile.outputs.status == 'success'
         with:
-          name: pmos-kernel-packages
-          path: output/
+          name: Kernel_APK_${{ env.COMPILE_STARTINGTIME }}
+          path: /workdir/*.apk
