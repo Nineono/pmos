@@ -1,4 +1,4 @@
-name: Build postmarketOS (Envkernel Mode)
+name: Use pmbootstrap Complie Kernel
 
 on:
   workflow_dispatch:
