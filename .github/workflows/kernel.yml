@@ -191,7 +191,7 @@ jobs:
       - name: Collect APKs
         run: |
           mkdir -p $GITHUB_WORKSPACE/output
-          WORK_PATH="/home/runner/work/pmbootstrap_work"
+          WORK_PATH="$HOME/.local/var/pmbootstrap"
           find "$WORK_PATH/packages" -name "*.apk" -exec cp {} $GITHUB_WORKSPACE/output/ \;
 
       - name: Upload Artifact
