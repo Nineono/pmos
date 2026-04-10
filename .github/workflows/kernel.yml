@@ -147,7 +147,7 @@ jobs:
           cp ${{ env.PMB_HELPERS }}/envkernel.sh ./
           chmod +x envkernel.sh
 
-      - name: Compile Kernel (Expect Mode)
+      - name: Compile Kernel
         run: |
           cd kernel_src
 
@@ -157,7 +157,7 @@ jobs:
           set timeout 1800
           spawn bash --login
 
-          send "source ./envkernel.sh --gcc\r"
+          send "source ./envkernel.sh\r"
           
           expect {
               "Source directory is not clean" { exp_continue }
