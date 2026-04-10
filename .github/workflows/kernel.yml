@@ -132,6 +132,24 @@ jobs:
       - name: Prepare Build Environment
         run: |
           cd kernel_src
+          
+          if [ -f "$GITHUB_WORKSPACE/patches/wifi-fix.patch" ]; then
+            echo "Applying wifi-fix.patch..."
+            patch -p1 < "$GITHUB_WORKSPACE/patches/wifi-fix.patch"
+          else
+            echo "Error: wifi-fix.patch not found"
+            exit 1
+          fi
+
+          mkdir -p arch/arm64/configs/
+          if [ -f "$GITHUB_WORKSPACE/patches/config_new.txt" ]; then
+            cp "$GITHUB_WORKSPACE/patches/config_new.txt" arch/arm64/configs/msm89x7_defconfig
+            echo "Successfully applied config_new.txt as msm89x7_defconfig"
+          else
+            echo "Error: config_new.txt not found"
+            exit 1
+          fi
+          
           cp ${{ env.PMB_HELPERS }}/envkernel.sh ./
           chmod +x envkernel.sh
 
