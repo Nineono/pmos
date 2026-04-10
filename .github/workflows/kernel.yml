@@ -147,19 +147,17 @@ jobs:
           cp ${{ env.PMB_HELPERS }}/envkernel.sh ./
           chmod +x envkernel.sh
 
-          mkdir -p arch/arm64/configs/
-          cp $GITHUB_WORKSPACE/patches/config_new.txt arch/arm64/configs/msm89x7_defconfig
-
       - name: Compile Kernel
         run: |
           cd kernel_src
-          pmbootstrap -v chroot --user -- \
-            sh -c "cd /mnt/linux && make msm89x7_defconfig && make -j$(nproc)"
+          pmbootstrap -v build --envkernel linux-postmarketos-qcom-msm89x7 --force --run-sh "
+            make msm89x7_defconfig && make -j$(nproc)
+          "
 
       - name: Package APK
         run: |
           cd kernel_src
-          pmbootstrap build --envkernel linux-postmarketos-qcom-msm89x7
+          pmbootstrap -v build --envkernel linux-postmarketos-qcom-msm89x7
 
       - name: Collect APKs
         run: |
@@ -170,5 +168,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: msm89x7-kernel-v2-apk
+          name: msm89x7-kernel-standard-apk
           path: ${{ github.workspace }}/output/*.apk
