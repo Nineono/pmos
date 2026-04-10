@@ -38,7 +38,7 @@ jobs:
           sudo -E apt-get -qq install -y \
             binfmt-support qemu-user-static \
             gcc-aarch64-linux-gnu \
-            fakeroot apk-tools \
+            fakeroot \
             bison flex bc git unzip \
             libncurses-dev libssl-dev libelf-dev \
             pkg-config
@@ -112,7 +112,7 @@ jobs:
           make modules_install INSTALL_MOD_PATH=$MODULES_DIR
 
           # 生成 .PKGINFO (确保内部无多余空格)
-          cat > $KERNEL_DIR/.PKGINFO <<EOF
+          cat > $KERNEL_DIR/.PKGINFO <<-EOF
           pkgname = linux-msm89x7
           pkgver = ${KVER}
           pkgrel = 0
@@ -123,7 +123,7 @@ jobs:
           builddate = $(date +%s)
           EOF
 
-          cat > $MODULES_DIR/.PKGINFO <<EOF
+          cat > $MODULES_DIR/.PKGINFO <<-EOF
           pkgname = linux-msm89x7-modules
           pkgver = ${KVER}
           pkgrel = 0
