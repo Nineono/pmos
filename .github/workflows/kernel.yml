@@ -26,12 +26,6 @@ jobs:
             dosfstools \
             parted
 
-      - name: Enable binfmt and loop devices
-        run: |
-          sudo modprobe loop || true
-          sudo losetup -f || true
-          sudo update-binfmts --enable || true
-
       - name: Setup pmbootstrap
         run: |
           git clone --depth=1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
