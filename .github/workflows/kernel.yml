@@ -147,13 +147,41 @@ jobs:
           cp ${{ env.PMB_HELPERS }}/envkernel.sh ./
           chmod +x envkernel.sh
 
-      - name: Compile Kernel
+      - name: Compile Kernel (Expect Mode)
         run: |
           cd kernel_src
-          pmbootstrap -v build --envkernel linux-postmarketos-qcom-msm89x7 -- \
-            sh -c "make msm89x7_defconfig"
-          pmbootstrap -v build --envkernel linux-postmarketos-qcom-msm89x7 -- \
-            sh -c "make -j$(nproc)"
+
+          touch .scmversion
+
+          expect <<EOF
+          set timeout 1800
+          spawn bash --login
+
+          send "source ./envkernel.sh --gcc\r"
+          
+          expect {
+              "Source directory is not clean" { exp_continue }
+              "Initializing Alpine chroot" { exp_continue }
+              "Failed to install all dependencies" { exit 1 }
+              "activated successfully" { 
+                  send "make msm89x7_defconfig\r"
+              }
+          }
+
+          expect {
+              "configuration written to" {
+                  send "make -j$(nproc)\r"
+              }
+          }
+
+          expect {
+              "Kernel: arch/arm64/boot/Image.gz is ready" {
+                  send "exit\r"
+              }
+              timeout { exit 1 }
+              eof
+          }
+          EOF
 
       - name: Package APK
         run: |
