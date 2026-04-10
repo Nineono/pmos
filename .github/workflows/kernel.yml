@@ -157,7 +157,7 @@ jobs:
           set timeout 3600
           spawn bash --login
 
-          send "source ./envkernel.sh\r"
+          send "source ./envkernel.sh --gcc\r"
           
           expect {
               "Source directory is not clean" { exp_continue }
@@ -171,12 +171,6 @@ jobs:
           expect {
               "configuration written to" {
                   send "make -j$(nproc)\r"
-              }
-          }
-
-          expect {
-              "Kernel: arch/arm64/boot/Image.gz is ready" {
-                  send "exit\r"
               }
               timeout { exit 1 }
               eof
