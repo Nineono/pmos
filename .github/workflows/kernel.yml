@@ -153,6 +153,8 @@ jobs:
 
           touch .scmversion
 
+          shopt -s expand_aliases
+
           source ./envkernel.sh --gcc
 
           make msm89x7_defconfig
